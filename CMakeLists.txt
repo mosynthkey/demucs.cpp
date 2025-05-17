@@ -1,8 +1,17 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5)
 
-option(USE_OPENBLAS "Use OpenBLAS" ON)
+option(USE_OPENBLAS "Use OpenBLAS" OFF)
 option(USE_AMD_AOCL "Use AMD AOCL" OFF)
 option(USE_INTEL_MKL "Use Intel MKL" OFF)
+option(USE_OPENMP "Use OpenMP" OFF)
+
+if(NOT DEFINED OPENMP_INCLUDE_DIR)
+    set(OPENMP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openmp/include" CACHE PATH "Path to OpenMP include directory")
+endif()
+
+if(NOT DEFINED OPENMP_LIB_DIR)
+    set(OPENMP_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/openmp/lib" CACHE PATH "Path to OpenMP library directory")
+endif()
 
 # Ensure USE_AMD_AOCL and USE_INTEL_MKL are not both set
 if(USE_AMD_AOCL AND USE_INTEL_MKL)
@@ -21,7 +30,7 @@ endif()
 
 set(CMAKE_CXX_FLAGS_DEBUG "-g -DEIGEN_FAST_MATH=0 -O0")
 
-set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -march=native -fno-unsafe-math-optimizations -freciprocal-math -fno-signed-zeros")
+set(CMAKE_CXX_FLAGS_RELEASE "-Ofast -fno-unsafe-math-optimizations -freciprocal-math -fno-signed-zeros")
 
 # define a macro NDEBUG for Eigen3 release builds
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DNDEBUG")
@@ -60,14 +69,25 @@ elseif (USE_OPENBLAS)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DEIGEN_USE_BLAS")
 else()
     # add openmp support to regular eigen
-    find_package(OpenMP REQUIRED)
-    if(OPENMP_FOUND)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-        include_directories(${OpenMP_CXX_INCLUDE_DIRS})
-    endif()
-
-    if(OPENMP_FOUND)
-        set(LIBRARIES_TO_LINK ${OpenMP_CXX_LIBRARIES})
+    if(USE_OPENMP)
+        if(APPLE)
+            # macOS requires special handling for OpenMP
+            find_package(OpenMP)
+            if(NOT OpenMP_FOUND)
+                set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${OPENMP_INCLUDE_DIR}")
+                set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${OPENMP_INCLUDE_DIR}")
+                set(OpenMP_C_LIB_NAMES "omp")
+                set(OpenMP_CXX_LIB_NAMES "omp")
+                set(OpenMP_omp_LIBRARY "${OPENMP_LIB_DIR}/libomp.dylib")
+            endif()
+        else()
+            find_package(OpenMP REQUIRED)
+        endif()
+        
+        if(OPENMP_FOUND)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+            include_directories(${OpenMP_CXX_INCLUDE_DIRS})
+        endif()
     endif()
 endif()
 
